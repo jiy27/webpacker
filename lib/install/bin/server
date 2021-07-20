@@ -1,0 +1,5 @@
+if [ "$1" = "" ]; then
+  bundle exec foreman start 3000
+else
+  bundle exec foreman start -p $1
+fi
