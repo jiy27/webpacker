@@ -13,6 +13,9 @@ end
 
 apply "#{__dir__}/binstubs.rb"
 
+copy_file "#{__dir__}/app/views/layouts/application.html.erb", "app/views/layouts/application.html.erb"
+copy_file "#{__dir__}/Procfile", "Procfile"
+
 git_ignore_path = Rails.root.join(".gitignore")
 if File.exists?(git_ignore_path)
   append_to_file git_ignore_path do
@@ -47,6 +50,20 @@ Dir.chdir(Rails.root) do
 
   say "Installing dev server for live reloading"
   results << run("yarn add --dev webpack-dev-server @webpack-cli/serve")
+
+  #Install some packages we frequently-used.
+  say "Installing jquery "
+  results << run("yarn add jquery")
+
+  say "Installing scss for stylesheet"
+  results << run("yarn add css-loader mini-css-extract-plugin css-minimizer-webpack-plugin sass sass-loader")
+
+  say "Installing vue"
+  results << run("yarn add vue vue-loader vue-template-compiler")
+
+  say "Installing foreman"
+  results << run("bundle add foreman --group \"development, test\"")
+
 end
 
 insert_into_file Rails.root.join("package.json").to_s, before: /\n}\n*$/ do
@@ -65,10 +82,12 @@ if Rails::VERSION::MAJOR == 5 && Rails::VERSION::MINOR > 1
   say "You need to allow webpack-dev-server host as allowed origin for connect-src.", :yellow
   say "This can be done in Rails 5.2+ for development environment in the CSP initializer", :yellow
   say "config/initializers/content_security_policy.rb with a snippet like this:", :yellow
-  say "policy.connect_src :self, :https, \"http://localhost:3035\", \"ws://localhost:3035\" if Rails.env.development?", :yellow
+  say "policy.connect_src :self, :https, \"http://0.0.0.0:3035\", \"ws://0.0.0.0:3035\" if Rails.env.development?", :yellow
 end
 
-unless results.all?
+if results.all?
+  say "Webpacker successfully installed 🎉 🍰", :green
+else
   say "Webpacker installation failed 😭 See above for details.", :red
   exit 1
 end
