@@ -1,5 +1,6 @@
 # Install Webpacker
 copy_file "#{__dir__}/config/webpacker.yml", "config/webpacker.yml"
+copy_file "#{__dir__}/package.json", "package.json"
 
 say "Copying webpack core config"
 directory "#{__dir__}/config/webpack", "config/webpack"
@@ -8,7 +9,8 @@ if Dir.exists?(Webpacker.config.source_path)
   say "The packs app source directory already exists"
 else
   say "Creating packs app source directory"
-  directory "#{__dir__}/packs", Webpacker.config.source_path
+  empty_directory "app/javascript"
+  copy_file "#{__dir__}/application.js", "app/javascript/application.js"
 end
 
 apply "#{__dir__}/binstubs.rb"
@@ -27,6 +29,40 @@ if File.exists?(git_ignore_path)
     "yarn-debug.log*\n"    +
     ".yarn-integrity\n"
   end
+end
+
+if (app_layout_path = Rails.root.join("app/views/layouts/application.html.erb")).exist?
+  say "Add JavaScript include tag in application layout"
+  insert_into_file app_layout_path.to_s, %(\n    <%= javascript_pack_tag "application" %>), before: /\s*<\/head>/
+else
+  say "Default application.html.erb is missing!", :red
+  say %(        Add <%= javascript_pack_tag "application" %> within the <head> tag in your custom layout.)
+end
+
+if (setup_path = Rails.root.join("bin/setup")).exist?
+  say "Run bin/yarn during bin/setup"
+  insert_into_file setup_path.to_s, <<-RUBY, after: %(  system("bundle check") || system!("bundle install")\n)
+
+  # Install JavaScript dependencies
+  system! "bin/yarn"
+RUBY
+end
+
+if (asset_config_path = Rails.root.join("config/initializers/assets.rb")).exist?
+  say "Add node_modules to the asset load path"
+  append_to_file asset_config_path, <<-RUBY
+
+# Add node_modules folder to the asset load path.
+Rails.application.config.assets.paths << Rails.root.join("node_modules")
+RUBY
+end
+
+if (csp_config_path = Rails.root.join("config/initializers/content_security_policy.rb")).exist?
+  say "Make note of webpack-dev-server exemption needed to csp"
+  insert_into_file csp_config_path, <<-RUBY, after: %(# Rails.application.config.content_security_policy do |policy|)
+  #   # If you are using webpack-dev-server then specify webpack-dev-server host
+  #   policy.connect_src :self, :https, "http://localhost:3035", "ws://localhost:3035" if Rails.env.development?
+RUBY
 end
 
 results = []
@@ -64,18 +100,6 @@ Dir.chdir(Rails.root) do
   say "Installing foreman"
   results << run("bundle add foreman --group \"development, test\"")
 
-end
-
-insert_into_file Rails.root.join("package.json").to_s, before: /\n}\n*$/ do
-  <<~JSON.chomp
-  ,
-    "babel": {
-      "presets": ["./node_modules/@rails/webpacker/package/babel/preset.js"]
-    },
-    "browserslist": [
-      "defaults"
-    ]
-  JSON
 end
 
 if Rails::VERSION::MAJOR == 5 && Rails::VERSION::MINOR > 1
